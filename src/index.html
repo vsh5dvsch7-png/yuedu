@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>月读</title>
+<style>
+  :root {
+    --bg: #f7f3e8; --fg: #2b2b2b; --bar: #ffffffee; --border: #ddd; --accent: #3b7ddd;
+  }
+  html[data-theme="night"] { --bg: #1b1b1b; --fg: #c8c8c8; --bar: #262626ee; --border: #444; }
+  html[data-theme="green"] { --bg: #cce8cf; --fg: #1f2f22; --bar: #dff0e1ee; --border: #9fbca3; }
+  html[data-theme="white"] { --bg: #ffffff; --fg: #222; --bar: #fafafaee; --border: #ddd; }
+
+  * { box-sizing: border-box; }
+  /* 背景只放在 body 上，会自动铺满整个画布（放在 html 上会导致滚动后主题背景不生效） */
+  html { background: transparent; }
+  body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg); font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+
+  /* 桌面模式：透明窗口，只留文字 */
+  html.ghost body { background: color-mix(in srgb, var(--bg) calc(var(--bga, 30) * 1%), transparent); }
+  /* 透明窗口没有次像素抗锯齿，字会偏淡；不用发光阴影（会发虚），描边改为可选的硬边 1px */
+  html.ghost #reader p { text-rendering: geometricPrecision; font-weight: 500; }
+  html.ghost.outline #reader p { text-shadow: 1px 0 0 var(--bg), -1px 0 0 var(--bg), 0 1px 0 var(--bg), 0 -1px 0 var(--bg); }
+  html.ghost #topbar { background: color-mix(in srgb, var(--bar) 92%, transparent); }
+  html.ghost #dragbar { display: block; }
+  #topbar .ghost-only { display: none; }
+  html.ghost #topbar .ghost-only { display: flex; }
+  #dragbar {
+    display: none; position: fixed; top: 0; left: 0; right: 0; height: 8px; z-index: 12;
+    -webkit-app-region: drag; background: transparent; cursor: move;
+  }
+  #dragbar:hover { background: var(--accent); opacity: .5; }
+  #topbar .winbtn { border: none; padding: 2px 8px; font-size: 14px; }
+
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    background: var(--bar); border-bottom: 1px solid var(--border); backdrop-filter: blur(6px);
+    display: flex; align-items: center; gap: 10px; padding: 8px 14px; flex-wrap: wrap;
+    transition: transform .25s;
+  }
+  #topbar.hidden { transform: translateY(-100%); }
+  #topbar .title { font-weight: bold; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #topbar .spacer { flex: 1; }
+  .group { display: flex; align-items: center; gap: 4px; }
+  button, select {
+    background: transparent; color: var(--fg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; cursor: pointer; font-size: 14px;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  input[type=range] { width: 110px; }
+  .small { font-size: 12px; opacity: .8; }
+
+  #reader {
+    max-width: 900px; margin: 0 auto; padding: 90px 28px 60vh;
+    line-height: var(--lh, 1.9); font-size: var(--fs, 20px);
+  }
+  #reader p { margin: 0 0 .9em; text-indent: 2em; word-break: break-all; white-space: pre-wrap; }
+  #reader .blk { content-visibility: auto; contain-intrinsic-size: auto var(--blkh, 3000px); }
+
+  #shelf { max-width: 900px; margin: 0 auto; padding: 90px 28px 60px; }
+  #shelf h2 { font-weight: normal; }
+  .book {
+    display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 10px;
+    border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+  }
+  .book:hover { border-color: var(--accent); }
+  .book .name { flex: 1; font-size: 17px; }
+  .book .meta { font-size: 13px; opacity: .7; }
+  .book .del { color: #c33; border: none; }
+
+  #searchView { max-width: 1000px; margin: 0 auto; padding: 90px 28px 60px; }
+  #searchView h2 { font-weight: normal; }
+  .srow { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+  #kw { flex: 1; font-size: 16px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--fg); }
+  #results { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+  #results th, #results td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  #results th { font-weight: normal; opacity: .6; }
+  #results td.n { font-size: 16px; }
+  #results td.c { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #results .dlbtn { white-space: nowrap; }
+  .bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 6px 0; }
+  #dlBar { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #dl { border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
+  #srcStatus span { display: inline-block; margin: 2px 10px 2px 0; }
+  #chapNo { width: 64px; font-size: 13px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--fg); }
+  #curChap { font-size: 12px; opacity: .7; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #tocPanel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 11; display: none; flex-direction: column;
+    background: var(--bar); border-left: 1px solid var(--border); backdrop-filter: blur(6px);
+  }
+  #tocPanel.show { display: flex; }
+  #tocPanel .head { display: flex; gap: 6px; align-items: center; padding: 10px; border-bottom: 1px solid var(--border); }
+  #tocFilter { flex: 1; font-size: 13px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--fg); }
+  #tocList { flex: 1; overflow-y: auto; padding: 6px 0; font-size: 14px; }
+  #tocList div { padding: 6px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #tocList div:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+  #tocList div.cur { color: var(--accent); font-weight: bold; }
+  .modal { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; background: #0006; }
+  .modal.show { display: flex; }
+  .modal .box { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; width: 520px; max-width: 92vw; max-height: 88vh; overflow: auto; box-shadow: 0 10px 40px #0005; }
+  .modal h3 { margin: 0 0 12px; font-weight: normal; }
+  .modal .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+  .modal input[type=text] { flex: 1; min-width: 200px; font-size: 14px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--fg); }
+  .modal .close { float: right; border: none; font-size: 16px; }
+  .pro { color: var(--accent); font-size: 11px; border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; margin-left: 4px; vertical-align: middle; }
+  #licBadge { font-size: 12px; opacity: .8; cursor: pointer; }
+  #donateImgs { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  #donateImgs img { width: 220px; border-radius: 8px; border: 1px solid var(--border); }
+  #srcList div { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  #srcList div span { flex: 1; }
+  #progress { position: fixed; bottom: 0; left: 0; height: 3px; background: var(--accent); width: 0; z-index: 10; }
+  #pct { position: fixed; right: 12px; bottom: 8px; font-size: 12px; opacity: .6; z-index: 10; }
+  #drop { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: #0008; color: #fff; font-size: 28px; z-index: 20; pointer-events: none; }
+  #drop.show { display: flex; }
+</style>
+</head>
+<body>
+
+<div id="dragbar" title="按住拖动窗口"></div>
+<div id="topbar">
+  <button id="btnShelf" title="返回书架">📚 书架</button>
+  <span class="title" id="bookTitle">未打开书籍</span>
+  <button id="btnImport" title="支持 txt、epub（epub 需专业版）">📂 导入</button>
+  <button id="btnSearch">🔍 搜书<span class="pro">PRO</span></button>
+  <button id="btnSettings" title="设置 / 激活">⚙</button>
+  <button id="btnDonate" title="请作者喝杯咖啡">☕</button>
+  <span id="licBadge" title="点击查看授权"></span>
+  <input type="file" id="file" accept=".txt,.epub" multiple style="display:none">
+
+  <span class="spacer"></span>
+
+  <div class="group">
+    <button id="btnToc" title="章节目录">☰ 目录</button>
+    <input type="number" id="chapNo" min="1" placeholder="章节" title="输入章节数字，回车跳转">
+    <button id="btnPrevChap" title="上一章">‹</button>
+    <button id="btnNextChap" title="下一章">›</button>
+    <span id="curChap"></span>
+  </div>
+  <div class="group">
+    <span class="small">字号</span>
+    <button id="fsMinus">A-</button>
+    <span id="fsVal" class="small">20</span>
+    <button id="fsPlus">A+</button>
+  </div>
+  <div class="group">
+    <span class="small">行距</span>
+    <input type="range" id="lh" min="1.3" max="2.6" step="0.1" value="1.9">
+  </div>
+  <div class="group">
+    <span class="small">主题</span>
+    <select id="theme">
+      <option value="paper">纸张</option>
+      <option value="white">纯白</option>
+      <option value="green">护眼</option>
+      <option value="night">夜间</option>
+    </select>
+  </div>
+  <div class="group">
+    <button id="btnAuto">▶ 自动滚动</button>
+    <span class="small">速度</span>
+    <input type="range" id="speed" min="1" max="10" step="1" value="3">
+    <span id="speedVal" class="small">3</span>
+  </div>
+  <div class="group">
+    <button id="btnGhost" title="窗口变透明，只留文字浮在桌面上">🪟 桌面模式<span class="pro">PRO</span></button>
+  </div>
+  <div class="group ghost-only">
+    <span class="small">背景</span>
+    <input type="range" id="bga" min="0" max="100" step="5" value="30" title="背景不透明度">
+    <label class="small"><input type="checkbox" id="onTop"> 置顶</label>
+    <label class="small"><input type="checkbox" id="blur"> 毛玻璃</label>
+    <label class="small" title="壁纸花时勾上，给文字加一圈底色描边"><input type="checkbox" id="outline"> 描边</label>
+    <button class="winbtn" id="btnMin" title="最小化">─</button>
+    <button class="winbtn" id="btnClose" title="关闭">✕</button>
+  </div>
+</div>
+
+<div id="shelf"></div>
+<div id="reader" style="display:none"></div>
+
+<div id="searchView" style="display:none">
+  <h2>联网搜书</h2>
+  <div class="srow">
+    <input type="text" id="kw" placeholder="输入书名或作者，回车搜索">
+    <button id="btnDoSearch">搜索</button>
+  </div>
+  <div class="srow small">
+    <span id="srcSummary"></span><span class="spacer"></span>
+    <button id="btnSrcMgr">📑 管理书源</button>
+  </div>
+  <div id="srcStatus" class="small"></div>
+  <div id="dl" style="display:none">
+    <div id="dlTitle"></div>
+    <div class="bar"><div id="dlBar"></div></div>
+    <div class="srow"><span id="dlInfo" class="small"></span><button id="btnCancelDl">取消</button></div>
+  </div>
+  <table id="results"><thead><tr><th>书名</th><th>作者</th><th>最新章节</th><th>更新</th><th>书源</th><th></th></tr></thead><tbody></tbody></table>
+  <p class="small" style="opacity:.55;margin-top:30px">月读不内置任何书源。书源规则由你自行导入（兼容 so-novel 的 json 规则格式），抓取的内容来自第三方网站，请遵守当地法律与网站条款，仅用于个人学习。</p>
+</div>
+
+<div id="tocPanel">
+  <div class="head"><input type="text" id="tocFilter" placeholder="筛选章节名"><span id="tocCount" class="small"></span><button id="btnTocClose">✕</button></div>
+  <div id="tocList"></div>
+</div>
+<div id="settingsModal" class="modal"><div class="box">
+  <button class="close" data-close>✕</button>
+  <h3>设置</h3>
+  <div class="row"><b>授权</b> <span id="licInfo"></span></div>
+  <div class="row"><input type="text" id="licCode" placeholder="粘贴激活码 YD-…"><button id="btnActivate">激活</button><button id="btnDeactivate" style="display:none">解除</button></div>
+  <div class="row small" id="licHint"></div>
+  <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
+  <div class="row"><b>老板键</b><span class="pro">PRO</span> <span class="small">按一下立刻隐藏窗口，再按恢复；也可点托盘图标</span></div>
+  <div class="row"><input type="text" id="bossKey" placeholder="例如 Ctrl+Alt+Q，留空关闭"><button id="btnBossKey">保存</button><span id="bossMsg" class="small"></span></div>
+  <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
+  <div class="row small" style="opacity:.7">月读 v1.0.0 · 免费版可导入 txt 阅读；专业版解锁桌面模式、老板键、epub 导入、联网搜书。新安装可免费试用 7 天。</div>
+</div></div>
+<div id="donateModal" class="modal"><div class="box">
+  <button class="close" data-close>✕</button>
+  <h3>☕ 支持作者</h3>
+  <p class="small">如果月读对你有帮助，欢迎请作者喝杯咖啡。</p>
+  <div id="donateImgs"></div>
+</div></div>
+<div id="srcModal" class="modal"><div class="box">
+  <button class="close" data-close>✕</button>
+  <h3>书源管理</h3>
+  <p class="small">导入 so-novel 格式的书源规则 json 文件（可从 <a href="#" id="lnkSoNovel">so-novel 项目</a> 获取或自己编写）。文件放在数据目录 rules 文件夹里。</p>
+  <div class="row"><button id="btnSrcImport">📥 导入规则文件</button><button id="btnSrcDir">📁 打开规则文件夹</button></div>
+  <div id="srcList"></div>
+</div></div>
+<div id="progress"></div>
+<div id="pct"></div>
+<div id="drop">松开导入 txt / epub</div>
+
+<script>
+/* ============ 存储：IndexedDB 存书的正文，localStorage 存设置和进度 ============ */
+const DB_NAME = 'novelReader', STORE = 'books';
+function openDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(STORE, { keyPath: 'id' });
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function dbPut(book) { const db = await openDB(); return new Promise((res, rej) => { const t = db.transaction(STORE, 'readwrite'); t.objectStore(STORE).put(book); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+async function dbGet(id) { const db = await openDB(); return new Promise((res, rej) => { const r = db.transaction(STORE).objectStore(STORE).get(id); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function dbAll() { const db = await openDB(); return new Promise((res, rej) => { const r = db.transaction(STORE).objectStore(STORE).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function dbDel(id) { const db = await openDB(); return new Promise((res, rej) => { const t = db.transaction(STORE, 'readwrite'); t.objectStore(STORE).delete(id); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+
+const settings = Object.assign({ fs: 20, lh: 1.9, theme: 'paper', speed: 3, bga: 30, onTop: false, blur: false, outline: false },JSON.parse(localStorage.getItem('nr-settings') || '{}'));
+function saveSettings() { localStorage.setItem('nr-settings', JSON.stringify(settings)); }
+function getProgress(id) { return JSON.parse(localStorage.getItem('nr-progress-' + id) || 'null'); }
+function setProgress(id, p) { localStorage.setItem('nr-progress-' + id, JSON.stringify(p)); }
+
+/* ============ 编码检测：优先 UTF-8，失败则用 GBK ============ */
+function decodeText(buf) {
+  const bytes = new Uint8Array(buf);
+  if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(buf);
+  if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(buf);
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch (e) { return new TextDecoder('gbk').decode(buf); }
+}
+
+/* ============ 导入（txt / epub，解析在主进程） ============ */
+const fileInput = document.getElementById('file');
+async function addBooks(items) {
+  let last = null, errs = [];
+  for (const it of items) {
+    if (!it || it.error) { if (it) errs.push(it.error); continue; }
+    const book = { id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), name: it.name + (it.author ? ' - ' + it.author : ''), text: it.text, size: it.text.length, added: Date.now() };
+    await dbPut(book); last = book;
+  }
+  if (errs.length) alert('部分文件导入失败：\n' + errs.join('\n'));
+  if (items.length === 1 && last) openBook(last.id); else if (last) showShelf();
+}
+document.getElementById('btnImport').onclick = async () => {
+  if (hasApp) addBooks(await window.app.importDialog()); else fileInput.click();
+};
+fileInput.addEventListener('change', e => importFiles(e.target.files));
+async function importFiles(files) {
+  const items = [];
+  for (const f of files) {
+    if (hasApp) items.push(await window.app.importBuffer(f.name, new Uint8Array(await f.arrayBuffer())));
+    else if (/\.txt$/i.test(f.name)) items.push({ name: f.name.replace(/\.txt$/i, ''), text: decodeText(await f.arrayBuffer()) });
+  }
+  fileInput.value = '';
+  await addBooks(items);
+}
+// 拖拽导入
+const drop = document.getElementById('drop');
+document.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('show'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) drop.classList.remove('show'); });
+document.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('show'); const fs = [...e.dataTransfer.files].filter(f => /\.(txt|epub)$/i.test(f.name)); if (fs.length) importFiles(fs); });
+
+/* ============ 书架 ============ */
+const shelf = document.getElementById('shelf'), reader = document.getElementById('reader'), bookTitle = document.getElementById('bookTitle');
+async function showShelf() {
+  stopAuto();
+  currentId = null; paras = []; blocks = [];
+  localStorage.removeItem('nr-last');
+  reader.style.display = 'none'; reader.innerHTML = ''; shelf.style.display = 'block'; searchView.style.display = 'none';
+  chapters = []; tocPanel.classList.remove('show'); document.getElementById('curChap').textContent = '';
+  bookTitle.textContent = '书架'; document.title = '月读';
+  document.getElementById('pct').textContent = ''; document.getElementById('progress').style.width = 0;
+  measureTop();
+  const books = (await dbAll()).sort((a, b) => (getProgress(b.id)?.time || b.added) - (getProgress(a.id)?.time || a.added));
+  shelf.innerHTML = '<h2>我的书架</h2>' + (books.length ? '' : '<p class="small">还没有书，点上方“导入”，或直接把 txt / epub 文件拖进窗口。</p>');
+  for (const b of books) {
+    const p = getProgress(b.id);
+    const pct = p ? (p.ratio * 100).toFixed(1) + '%' : '未读';
+    const div = document.createElement('div'); div.className = 'book';
+    div.innerHTML = '<span class="name"></span><span class="meta">' + (b.size / 10000).toFixed(1) + ' 万字 · 进度 ' + pct + '</span><button class="del" title="删除">✕</button>';
+    div.querySelector('.name').textContent = b.name;
+    div.onclick = () => openBook(b.id);
+    div.querySelector('.del').onclick = ev => { ev.stopPropagation(); if (confirm('删除《' + b.name + '》？')) dbDel(b.id).then(showShelf); };
+    shelf.appendChild(div);
+  }
+}
+document.getElementById('btnShelf').onclick = showShelf;
+
+/* ============ 打开书 & 渲染（整本连续滚动，不分页） ============ */
+let currentId = null, paras = [], blocks = [], chapters = [], TOP = 80;
+function measureTop() {
+  TOP = document.getElementById('topbar').offsetHeight + 16;
+  reader.style.paddingTop = TOP + 'px'; shelf.style.paddingTop = TOP + 'px';
+}
+window.addEventListener('resize', () => keepPosition(measureTop));
+async function openBook(id) {
+  const book = await dbGet(id); if (!book) return;
+  localStorage.setItem('nr-last', id);
+  currentId = id;
+  shelf.style.display = 'none'; searchView.style.display = 'none'; reader.style.display = 'block';
+  bookTitle.textContent = book.name; document.title = book.name + ' - 月读';
+  reader.innerHTML = '';
+  const BLK = 50, esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let html = '', n = 0;
+  chapters = [];
+  for (const line of book.text.split(/\r?\n/)) {
+    const t = line.trim(); if (!t) continue;
+    if (n % BLK === 0) html += (n ? '</div>' : '') + '<div class="blk">';
+    const ch = parseChapterTitle(t);
+    if (ch) chapters.push({ i: n, title: t, num: ch });
+    html += '<p>' + esc(t) + '</p>'; n++;
+  }
+  renderToc();
+  if (n) html += '</div>';
+  reader.innerHTML = html;
+  blocks = Array.from(reader.children);
+  paras = Array.from(reader.querySelectorAll('p'));
+  // 估算每块高度，让未渲染部分的占位尽量接近真实高度
+  document.documentElement.style.setProperty('--blkh', Math.round(BLK * settings.fs * settings.lh * 2.2) + 'px');
+  measureTop();
+  const prog = getProgress(id);
+  const restore = () => {
+    if (prog && paras[prog.index]) scrollToPara(prog.index, prog.offset);
+    else window.scrollTo(0, 0);
+    updateProgress(); updateCurChap();
+  };
+  requestAnimationFrame(restore);
+  setTimeout(restore, 150);   // 字体加载完成后再校正一次
+}
+
+/* ============ 进度记录：记“视口顶部是第几段 + 段内比例”，换字号后也不乱 ============ */
+// 绝对坐标工具：分块用了 content-visibility，未滚到的块没有排版，需要时强制渲染该块
+const absTop = el => el.getBoundingClientRect().top + window.scrollY;
+function ensureBlock(i) {
+  const b = blocks[(i / 50) | 0];
+  if (b && b.style.contentVisibility !== 'visible') b.style.contentVisibility = 'visible';
+}
+function pTop(i) { ensureBlock(i); return absTop(paras[i]); }
+function pHeight(i) { ensureBlock(i); return paras[i].offsetHeight || 1; }
+function scrollToPara(i, offset) { window.scrollTo(0, pTop(i) + (offset || 0) * pHeight(i) - TOP); }
+function topPara() {
+  const y = window.scrollY + TOP;
+  let lo = 0, hi = blocks.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (absTop(blocks[mid]) <= y) lo = mid; else hi = mid - 1; }
+  ensureBlock(lo * 50);
+  const ps = blocks[lo].children;
+  let i = 0;
+  while (i + 1 < ps.length && absTop(ps[i + 1]) <= y) i++;
+  return lo * 50 + i;
+}
+function snapshot() {
+  const i = topPara();
+  const max = document.documentElement.scrollHeight - innerHeight;
+  return {
+    index: i,
+    offset: Math.max(0, (window.scrollY + TOP - pTop(i)) / pHeight(i)),
+    ratio: max > 0 ? Math.min(1, window.scrollY / max) : 1,
+    time: Date.now()
+  };
+}
+let saveTimer = null, chapTimer = null;
+function updateProgress() {
+  if (!currentId || !paras.length) return;
+  const max = document.documentElement.scrollHeight - innerHeight;
+  const ratio = max > 0 ? Math.min(1, window.scrollY / max) : 1;
+  document.getElementById('progress').style.width = (ratio * 100) + '%';
+  document.getElementById('pct').textContent = (ratio * 100).toFixed(2) + '%';
+  clearTimeout(chapTimer); chapTimer = setTimeout(updateCurChap, 150);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => setProgress(currentId, snapshot()), 300);
+}
+window.addEventListener('scroll', updateProgress, { passive: true });
+window.addEventListener('beforeunload', () => { clearTimeout(saveTimer); if (currentId && paras.length) setProgress(currentId, snapshot()); });
+
+/* ============ 字号 / 行距 / 主题（改字号时保持当前段落位置） ============ */
+function keepPosition(fn) {
+  const i = paras.length ? topPara() : -1;
+  const off = i >= 0 ? (window.scrollY + TOP - pTop(i)) / pHeight(i) : 0;
+  fn();
+  if (i >= 0) scrollToPara(i, off);
+}
+function applySettings() {
+  document.documentElement.style.setProperty('--fs', settings.fs + 'px');
+  document.documentElement.style.setProperty('--blkh', Math.round(50 * settings.fs * settings.lh * 2.2) + 'px');
+  document.documentElement.style.setProperty('--lh', settings.lh);
+  document.documentElement.dataset.theme = settings.theme;
+  document.documentElement.style.setProperty('--bga', settings.bga);
+  document.getElementById('bga').value = settings.bga;
+  document.getElementById('fsVal').textContent = settings.fs;
+  document.getElementById('lh').value = settings.lh;
+  document.getElementById('theme').value = settings.theme;
+  document.getElementById('speed').value = settings.speed;
+  document.getElementById('speedVal').textContent = settings.speed;
+  saveSettings();
+}
+function setFs(v) { keepPosition(() => { settings.fs = Math.max(10, Math.min(60, v)); applySettings(); }); }
+document.getElementById('fsMinus').onclick = () => setFs(settings.fs - 1);
+document.getElementById('fsPlus').onclick = () => setFs(settings.fs + 1);
+document.getElementById('lh').oninput = e => keepPosition(() => { settings.lh = +e.target.value; applySettings(); });
+document.getElementById('theme').onchange = e => { settings.theme = e.target.value; applySettings(); };
+document.getElementById('speed').oninput = e => { settings.speed = +e.target.value; applySettings(); };
+applySettings();
+
+/* ============ 桌面模式（透明窗口） ============ */
+const GHOST = new URLSearchParams(location.search).get('ghost') === '1';
+const hasApp = typeof window.app !== 'undefined';
+if (GHOST) {
+  document.documentElement.classList.add('ghost');
+  document.getElementById('btnGhost').textContent = '🪟 退出桌面模式';
+  document.getElementById('btnGhost').classList.add('active');
+  document.getElementById('onTop').checked = settings.onTop;
+  document.getElementById('blur').checked = settings.blur;
+  document.getElementById('outline').checked = settings.outline;
+  document.documentElement.classList.toggle('outline', settings.outline);
+  if (hasApp) { window.app.setOnTop(settings.onTop); if (settings.blur) window.app.setBlur(true); }
+}
+document.getElementById('btnGhost').onclick = () => { if (!hasApp) return; if (!GHOST && !requirePro('桌面模式')) return; window.app.setGhost(!GHOST); };
+document.getElementById('bga').oninput = e => { settings.bga = +e.target.value; applySettings(); };
+document.getElementById('onTop').onchange = e => { settings.onTop = e.target.checked; saveSettings(); if (hasApp) window.app.setOnTop(settings.onTop); };
+document.getElementById('blur').onchange = e => { settings.blur = e.target.checked; saveSettings(); if (hasApp) window.app.setBlur(settings.blur); };
+document.getElementById('outline').onchange = e => { settings.outline = e.target.checked; saveSettings(); document.documentElement.classList.toggle('outline', settings.outline); };
+document.getElementById('btnMin').onclick = () => hasApp && window.app.minimize();
+document.getElementById('btnClose').onclick = () => hasApp && window.app.close();
+
+/* ============ 自动滚动 ============ */
+let auto = false, timerId = null, lastT = 0, acc = 0;
+const btnAuto = document.getElementById('btnAuto');
+function tick() {
+  if (!auto) return;
+  const t = performance.now();
+  const pxPerSec = settings.speed * settings.speed * 4 + 10;   // 速度1≈14px/s，速度10≈410px/s
+  acc += Math.min(t - lastT, 200) / 1000 * pxPerSec;
+  lastT = t;
+  const step = Math.floor(acc); acc -= step;
+  if (step > 0) window.scrollBy(0, step);
+  if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 1) stopAuto();
+}
+function startAuto() { if (!currentId) return; auto = true; lastT = performance.now(); acc = 0; btnAuto.textContent = '⏸ 停止滚动'; btnAuto.classList.add('active'); timerId = setInterval(tick, 16); }
+function stopAuto() { auto = false; clearInterval(timerId); btnAuto.textContent = '▶ 自动滚动'; btnAuto.classList.remove('active'); }
+btnAuto.onclick = () => auto ? stopAuto() : startAuto();
+
+/* ============ 快捷键 & 点击正文隐藏工具栏 ============ */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.code === 'Space') { e.preventDefault(); auto ? stopAuto() : startAuto(); }
+  else if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); setFs(settings.fs + 1); }
+  else if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); setFs(settings.fs - 1); }
+  else if (e.key === 'ArrowLeft') { settings.speed = Math.max(1, settings.speed - 1); applySettings(); }
+  else if (e.key === 'ArrowRight') { settings.speed = Math.min(10, settings.speed + 1); applySettings(); }
+});
+reader.addEventListener('click', () => document.getElementById('topbar').classList.toggle('hidden'));
+
+/* ============ 章节识别与跳转 ============ */
+const CN_NUM = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+function cn2num(str) {
+  if (/^\d+$/.test(str)) return parseInt(str, 10);
+  let total = 0, section = 0, num = 0;
+  for (const c of str) {
+    if (c in CN_NUM) num = CN_NUM[c];
+    else if (c === '十') { section += (num || 1) * 10; num = 0; }
+    else if (c === '百') { section += (num || 1) * 100; num = 0; }
+    else if (c === '千') { section += (num || 1) * 1000; num = 0; }
+    else if (c === '万') { total += (section + num || 1) * 10000; section = 0; num = 0; }
+    else return NaN;
+  }
+  return total + section + num;
+}
+const CHAP_RE = /^(?:第\s*([0-9零〇一二两三四五六七八九十百千万]{1,12})\s*[章节回话集]|(?:chapter|Chapter|CHAPTER)\s*(\d+))/;
+function parseChapterTitle(t) {
+  if (t.length > 40 || /[。，；]/.test(t)) return null;          // 标题不会有句号逗号
+  const m = t.match(CHAP_RE); if (!m) return null;
+  const rest = t.slice(m[0].length).trim();
+  if (rest.length > 30 || /^第/.test(rest)) return null;          // “第1章第1段……”这种是正文不是标题
+  const n = m[1] ? cn2num(m[1]) : parseInt(m[2], 10);
+  return isNaN(n) ? null : n;
+}
+function curChapIdx() {
+  if (!chapters.length) return -1;
+  const p = topPara();
+  let lo = 0, hi = chapters.length - 1;
+  if (chapters[0].i > p) return -1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (chapters[mid].i <= p) lo = mid; else hi = mid - 1; }
+  return lo;
+}
+function updateCurChap() {
+  const cc = document.getElementById('curChap');
+  if (!currentId) { cc.textContent = ''; return; }
+  const k = curChapIdx();
+  cc.textContent = k >= 0 ? chapters[k].title : '';
+  cc.title = cc.textContent;
+  const list = document.getElementById('tocList');
+  const old = list.querySelector('.cur'); if (old) old.classList.remove('cur');
+  if (k >= 0 && tocPanel.classList.contains('show')) {
+    const el = list.querySelector('[data-k="' + k + '"]');
+    if (el) { el.classList.add('cur'); el.scrollIntoView({ block: 'nearest' }); }
+  }
+}
+function gotoChapter(k) {
+  if (k < 0 || k >= chapters.length) return;
+  stopAuto();
+  scrollToPara(chapters[k].i, 0);
+  updateProgress(); updateCurChap();
+  setTimeout(() => { updateProgress(); updateCurChap(); }, 80);
+}
+function jumpToChapterNo(n) {
+  if (!chapters.length) { alert('这本书没识别到“第X章”这样的章节标题'); return; }
+  // 优先按标题里的章节号匹配，找不到就按第 n 个标题
+  let k = chapters.findIndex(c => c.num === n);
+  if (k < 0) k = Math.min(chapters.length, Math.max(1, n)) - 1;
+  gotoChapter(k);
+}
+const tocPanel = document.getElementById('tocPanel');
+function renderToc(filter) {
+  const list = document.getElementById('tocList');
+  const f = (filter || '').trim();
+  const frag = document.createDocumentFragment();
+  chapters.forEach((c, k) => {
+    if (f && !c.title.includes(f)) return;
+    const d = document.createElement('div'); d.textContent = c.title; d.dataset.k = k; d.onclick = () => gotoChapter(k);
+    frag.appendChild(d);
+  });
+  list.innerHTML = ''; list.appendChild(frag);
+  document.getElementById('tocCount').textContent = chapters.length ? chapters.length + ' 章' : '未识别到章节';
+}
+document.getElementById('btnToc').onclick = () => { if (!currentId) return; tocPanel.classList.toggle('show'); updateCurChap(); };
+document.getElementById('btnTocClose').onclick = () => tocPanel.classList.remove('show');
+document.getElementById('tocFilter').oninput = e => renderToc(e.target.value);
+document.getElementById('chapNo').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { const n = parseInt(e.target.value, 10); if (n > 0) { jumpToChapterNo(n); e.target.blur(); } }
+});
+document.getElementById('btnPrevChap').onclick = () => { const k = curChapIdx(); gotoChapter(Math.max(0, k - 1)); };
+document.getElementById('btnNextChap').onclick = () => { const k = curChapIdx(); gotoChapter(k + 1); };
+
+/* ============ 联网搜书 ============ */
+const searchView = document.getElementById('searchView');
+function showSearch() {
+  stopAuto();
+  currentId = null; paras = []; blocks = [];
+  localStorage.removeItem('nr-last');
+  reader.style.display = 'none'; reader.innerHTML = ''; shelf.style.display = 'none';
+  searchView.style.display = 'block';
+  chapters = []; tocPanel.classList.remove('show'); document.getElementById('curChap').textContent = '';
+  bookTitle.textContent = '搜书'; document.title = '月读';
+  document.getElementById('pct').textContent = ''; document.getElementById('progress').style.width = 0;
+  measureTop();
+  document.getElementById('kw').focus();
+  refreshSrcSummary();
+}
+async function refreshSrcSummary() {
+  if (!hasApp) return;
+  const list = await window.app.rulesList();
+  const n = list.filter(x => x.canSearch && !x.disabled).length;
+  document.getElementById('srcSummary').innerHTML = n ? `已导入 ${list.length} 个书源，${n} 个支持搜索` : '<b>还没有书源</b>，点右侧“管理书源”导入规则文件后才能搜索';
+}
+document.getElementById('btnSearch').onclick = () => { if (requirePro('联网搜书')) showSearch(); };
+document.getElementById('kw').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+document.getElementById('btnDoSearch').onclick = doSearch;
+let searching = false;
+async function doSearch() {
+  const kw = document.getElementById('kw').value.trim();
+  if (!kw || searching || !hasApp) return;
+  searching = true;
+  const st = document.getElementById('srcStatus'), tb = document.querySelector('#results tbody');
+  tb.innerHTML = ''; st.innerHTML = '正在搜索…';
+  const lines = [];
+  window.app.onSourceStatus(s => { lines.push(s.ok ? `<span>✓ ${s.name} ${s.count}</span>` : `<span style="opacity:.5">✗ ${s.name}</span>`); st.innerHTML = lines.join(''); });
+  try {
+    const res = await window.app.search(kw);
+    if (!res.length) st.innerHTML += '<br>没有搜到，换个关键词试试';
+    for (const r of res) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="n"></td><td></td><td class="c"></td><td></td><td></td><td><button class="dlbtn">⬇ 下载到书架</button></td>';
+      const td = tr.children;
+      td[0].textContent = r.bookName; td[1].textContent = r.author || ''; td[2].textContent = r.latestChapter || ''; td[2].title = r.latestChapter || '';
+      td[3].textContent = r.lastUpdateTime || ''; td[4].textContent = r.sourceName;
+      tr.querySelector('.dlbtn').onclick = () => startDownload(r);
+      tb.appendChild(tr);
+    }
+  } catch (e) { st.innerHTML = '搜索出错：' + e.message; }
+  searching = false;
+}
+let downloading = false;
+async function startDownload(r) {
+  if (downloading || !hasApp) return;
+  downloading = true;
+  const dl = document.getElementById('dl');
+  dl.style.display = 'block';
+  document.getElementById('dlTitle').textContent = `正在下载《${r.bookName}》 · ${r.sourceName}`;
+  document.getElementById('dlInfo').textContent = '正在获取目录…';
+  document.getElementById('dlBar').style.width = '0';
+  window.app.onProgress(p => {
+    document.getElementById('dlBar').style.width = (p.done / p.total * 100) + '%';
+    document.getElementById('dlInfo').textContent = `${p.done} / ${p.total} 章` + (p.failed ? `，失败 ${p.failed}` : '') + ` · ${p.title}`;
+  });
+  try {
+    const out = await window.app.download(r.sourceId, r.url);
+    const book = { id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), name: r.bookName + (r.author ? ' - ' + r.author : ''), text: out.text, size: out.text.length, added: Date.now(), source: r.sourceName, sourceUrl: r.url };
+    await dbPut(book);
+    document.getElementById('dlInfo').textContent = `完成：${out.chapters} 章` + (out.failed ? `，${out.failed} 章失败` : '') + '，已加入书架';
+    setTimeout(() => { dl.style.display = 'none'; openBook(book.id); }, 800);
+  } catch (e) {
+    document.getElementById('dlInfo').textContent = '下载失败：' + (e.message || e).replace(/^Error invoking remote method '[^']+': Error: /, '');
+  }
+  downloading = false;
+}
+document.getElementById('btnCancelDl').onclick = () => hasApp && window.app.cancelDownload();
+
+/* ============ 授权、设置、打赏、书源管理 ============ */
+let LIC = { pro: true, kind: 'trial' };
+function licText(l) { return l.kind === 'licensed' ? '专业版' + (l.expire ? '（到期 ' + new Date(l.expire * 1000).toLocaleDateString() + '）' : '') : l.kind === 'trial' ? `试用版 · 剩余 ${l.daysLeft} 天` : '免费版'; }
+async function refreshLicense() {
+  if (!hasApp) return;
+  LIC = await window.app.licenseStatus();
+  document.getElementById('licBadge').textContent = licText(LIC);
+  document.getElementById('licInfo').textContent = licText(LIC) + (LIC.name ? ' · ' + LIC.name : '');
+  document.getElementById('btnDeactivate').style.display = LIC.kind === 'licensed' ? '' : 'none';
+  document.getElementById('licHint').textContent = LIC.kind === 'licensed' ? '感谢支持！' : '获取激活码：点 ☕ 支持作者后联系作者领取。';
+}
+function requirePro(feature) {
+  if (!hasApp || LIC.pro) return true;
+  openModal('settingsModal');
+  document.getElementById('licHint').textContent = feature + ' 是专业版功能，请输入激活码激活。';
+  return false;
+}
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+document.querySelectorAll('.modal [data-close]').forEach(b => b.onclick = () => b.closest('.modal').classList.remove('show'));
+document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); }));
+document.getElementById('btnSettings').onclick = async () => { await refreshLicense(); if (hasApp) document.getElementById('bossKey').value = await window.app.getBossKey(); openModal('settingsModal'); };
+document.getElementById('licBadge').onclick = document.getElementById('btnSettings').onclick;
+document.getElementById('btnActivate').onclick = async () => {
+  const r = await window.app.activate(document.getElementById('licCode').value.trim());
+  document.getElementById('licHint').textContent = r.ok ? '激活成功！' : r.msg;
+  await refreshLicense();
+};
+document.getElementById('btnDeactivate').onclick = async () => { if (confirm('确定解除本机激活？')) { await window.app.deactivate(); await refreshLicense(); } };
+document.getElementById('btnBossKey').onclick = async () => {
+  if (!requirePro('老板键')) return;
+  const r = await window.app.setBossKey(document.getElementById('bossKey').value.trim());
+  document.getElementById('bossMsg').textContent = r.ok ? '已保存' : r.msg;
+};
+document.getElementById('btnDonate').onclick = async () => {
+  const box = document.getElementById('donateImgs'); box.innerHTML = '';
+  const imgs = hasApp ? await window.app.donateImages() : {};
+  for (const [k, src] of Object.entries(imgs)) { if (k === 'any' && (imgs.wechat || imgs.alipay)) continue; const im = document.createElement('img'); im.src = src; im.title = { wechat: '微信', alipay: '支付宝' }[k] || ''; box.appendChild(im); }
+  if (!box.children.length) box.textContent = '作者还没放收款码';
+  openModal('donateModal');
+};
+async function renderSrcList() {
+  const files = await window.app.rulesFiles(), list = await window.app.rulesList();
+  const box = document.getElementById('srcList'); box.innerHTML = '';
+  if (!files.length) { box.innerHTML = '<div class="small">还没有导入任何书源文件</div>'; return; }
+  for (const f of files) {
+    const n = list.filter(x => x.file === f).length;
+    const d = document.createElement('div');
+    d.innerHTML = '<span></span><span class="small" style="flex:0"></span><button class="del">删除</button>';
+    d.children[0].textContent = f; d.children[1].textContent = n + ' 个站点';
+    d.querySelector('.del').onclick = async () => { if (confirm('删除 ' + f + '？')) { await window.app.rulesDelete(f); renderSrcList(); refreshSrcSummary(); } };
+    box.appendChild(d);
+  }
+}
+document.getElementById('btnSrcMgr').onclick = () => { renderSrcList(); openModal('srcModal'); };
+document.getElementById('btnSrcImport').onclick = async () => {
+  const r = await window.app.rulesImport();
+  if (r.errors && r.errors.length) alert('导入失败：\n' + r.errors.join('\n'));
+  renderSrcList(); refreshSrcSummary();
+};
+document.getElementById('btnSrcDir').onclick = () => window.app.rulesOpenDir();
+document.getElementById('lnkSoNovel').onclick = e => { e.preventDefault(); window.app.openUrl('https://github.com/freeok/so-novel/tree/main/bundle/rules'); };
+refreshLicense();
+
+/* ============ 启动：自动打开上次在读的书 ============ */
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+(async () => {
+  const books = await dbAll();
+  const lastId = localStorage.getItem('nr-last');
+  if (lastId && books.some(b => b.id === lastId)) openBook(lastId); else showShelf();
+})();
+</script>
+</body>
+</html>

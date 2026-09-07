@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>月读 - 桌面小说阅读器</title>
+<style>
+  body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f7f3e8; color: #2b2b2b; }
+  .hero { background: #1c2444; color: #f6e296; text-align: center; padding: 70px 20px 60px; }
+  .hero img { width: 110px; }
+  .hero h1 { font-size: 44px; margin: 14px 0 6px; letter-spacing: 8px; }
+  .hero p { color: #d8d8e0; font-size: 18px; margin: 0 0 28px; }
+  .btn { display: inline-block; background: #f6e296; color: #1c2444; padding: 12px 34px; border-radius: 8px; font-weight: bold; text-decoration: none; font-size: 17px; }
+  .btn.ghost { background: transparent; color: #f6e296; border: 1px solid #f6e296; margin-left: 10px; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 50px 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 18px; }
+  .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px #0001; }
+  .card h3 { margin: 0 0 8px; font-size: 18px; }
+  .card p { margin: 0; font-size: 14px; color: #555; line-height: 1.7; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 30px; }
+  .shots img { width: 100%; border-radius: 8px; box-shadow: 0 4px 20px #0002; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; }
+  th, td { padding: 12px 14px; border-bottom: 1px solid #eee; text-align: left; }
+  th { background: #f0ece0; font-weight: normal; }
+  td:nth-child(2), td:nth-child(3), th:nth-child(2), th:nth-child(3) { text-align: center; }
+  footer { text-align: center; color: #888; font-size: 13px; padding: 30px; }
+  h2 { font-weight: normal; margin: 0 0 20px; }
+</style>
+</head>
+<body>
+<div class="hero">
+  <img src="../assets/icon.png" alt="月读">
+  <h1>月读</h1>
+  <p>安静、轻巧的 Windows 桌面小说阅读器</p>
+  <a class="btn" href="https://github.com/__GITHUB_USER__/yuedu/releases">下载 Windows 版</a>
+  <a class="btn ghost" href="https://github.com/__GITHUB_USER__/yuedu">GitHub 源码</a>
+</div>
+<div class="wrap">
+  <h2>为什么用月读</h2>
+  <div class="grid">
+    <div class="card"><h3>🪟 桌面模式</h3><p>窗口透明，只剩文字浮在桌面上。背景浓淡随意调，可置顶、毛玻璃、描边。看书不挡事。</p></div>
+    <div class="card"><h3>⌨ 老板键</h3><p>全局快捷键一键隐藏，再按恢复。托盘图标常驻，想看就看。</p></div>
+    <div class="card"><h3>📜 整本连续滚动</h3><p>不按章翻页，一个长页面读到底。百万字大书秒开，自动滚动十档速度。</p></div>
+    <div class="card"><h3>🔖 进度与章节</h3><p>按段落记住读到哪里，改字号也不跑位。自动识别章节，输入数字直达。</p></div>
+    <div class="card"><h3>📂 txt / epub</h3><p>txt 自动识别 GBK 与 UTF-8，epub 一键转换。拖进窗口即可导入。</p></div>
+    <div class="card"><h3>🔍 自定义书源</h3><p>兼容 so-novel 书源规则格式，导入规则后可联网搜书并整本下载。软件本身不含任何书源。</p></div>
+  </div>
+  <div class="shots">
+    <img src="shot-reader.png" alt="阅读界面">
+    <img src="shot-ghost.png" alt="桌面模式">
+  </div>
+</div>
+<div class="wrap" style="padding-top:0">
+  <h2>免费版 与 专业版</h2>
+  <table>
+    <tr><th>功能</th><th>免费版</th><th>专业版</th></tr>
+    <tr><td>txt 导入、阅读、进度记忆、章节定位、自动滚动、四种主题</td><td>✓</td><td>✓</td></tr>
+    <tr><td>桌面模式（透明窗口）</td><td></td><td>✓</td></tr>
+    <tr><td>老板键</td><td></td><td>✓</td></tr>
+    <tr><td>epub 导入</td><td></td><td>✓</td></tr>
+    <tr><td>联网搜书（自定义书源）</td><td></td><td>✓</td></tr>
+  </table>
+  <p style="color:#666;font-size:14px">新安装免费试用专业版 7 天。激活码离线校验，一次购买永久使用。</p>
+</div>
+<footer>月读 · GPL-3.0 开源 · 书源内容来自第三方网站，请遵守当地法律，仅供个人学习</footer>
+</body>
+</html>

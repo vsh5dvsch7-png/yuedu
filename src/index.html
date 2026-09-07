@@ -140,7 +140,7 @@
 <div id="donateModal" class="modal"><div class="box">
   <button class="close" data-close>✕</button>
   <h3>☕ 支持作者</h3>
-  <p class="small">如果月读对你有帮助，欢迎请作者喝杯咖啡。</p>
+  <p class="small">如果月读对你有帮助，欢迎请作者喝杯咖啡。有问题或想要的功能，欢迎 <a href="#" id="btnFeedbackCore">到 GitHub 反馈</a>。</p>
   <div id="donateImgs"></div>
 </div></div>
 <div id="progress"></div>
@@ -470,6 +470,7 @@ document.getElementById('btnDonate').onclick = async () => {
   if (!box.children.length) box.textContent = '作者还没放收款码';
   openModal('donateModal');
 };
+document.getElementById('btnFeedbackCore').onclick = e => { e.preventDefault(); window.app.openUrl('https://github.com/vsh5dvsch7-png/yuedu/issues'); };
 
 /* ============ 启动：自动打开上次在读的书 ============ */
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';

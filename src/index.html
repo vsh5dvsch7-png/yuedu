@@ -216,7 +216,7 @@ async function showShelf() {
   localStorage.removeItem('nr-last');
   reader.style.display = 'none'; reader.innerHTML = ''; shelf.style.display = 'block';
   chapters = []; tocPanel.classList.remove('show'); document.getElementById('curChap').textContent = '';
-  bookTitle.textContent = '书架'; document.title = '月读';
+  bookTitle.textContent = '书架'; setTitle('月读');
   document.getElementById('pct').textContent = ''; document.getElementById('progress').style.width = 0;
   measureTop();
   const books = (await dbAll()).sort((a, b) => (getProgress(b.id)?.time || b.added) - (getProgress(a.id)?.time || a.added));
@@ -246,7 +246,7 @@ async function openBook(id) {
   localStorage.setItem('nr-last', id);
   currentId = id;
   shelf.style.display = 'none'; reader.style.display = 'block';
-  bookTitle.textContent = book.name; document.title = book.name + ' - 月读';
+  bookTitle.textContent = book.name; setTitle(book.name + ' - 月读');
   reader.innerHTML = '';
   const BLK = 50, esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   let html = '', n = 0;
@@ -256,7 +256,7 @@ async function openBook(id) {
     if (n % BLK === 0) html += (n ? '</div>' : '') + '<div class="blk">';
     const ch = parseChapterTitle(t);
     if (ch) chapters.push({ i: n, title: t, num: ch });
-    html += '<p>' + esc(t) + '</p>'; n++;
+    html += (ch ? '<p class="h">' : '<p>') + esc(t) + '</p>'; n++;
   }
   renderToc();
   if (n) html += '</div>';
@@ -349,6 +349,7 @@ applySettings();
 
 /* ============ 环境 ============ */
 const hasApp = typeof window.app !== 'undefined';
+function setTitle(t) { document.title = t; }
 
 /* ============ 自动滚动 ============ */
 let auto = false, timerId = null, lastT = 0, acc = 0;

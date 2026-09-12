@@ -11,6 +11,11 @@
   html[data-theme="night"] { --bg: #1b1b1b; --fg: #c8c8c8; --bar: #262626ee; --border: #444; }
   html[data-theme="green"] { --bg: #cce8cf; --fg: #1f2f22; --bar: #dff0e1ee; --border: #9fbca3; }
   html[data-theme="white"] { --bg: #ffffff; --fg: #222; --bar: #fafafaee; --border: #ddd; }
+  html[data-theme="sepia"] { --bg: #e9dcc3; --fg: #4a3b28; --bar: #f2e8d5ee; --border: #c7b596; --accent: #9a6a2f; }
+  html[data-theme="ink"]   { --bg: #eceae4; --fg: #33322e; --bar: #f5f4f0ee; --border: #c9c7c0; --accent: #5a6b7a; }
+  html[data-theme="mint"]  { --bg: #dceee9; --fg: #21322e; --bar: #e9f5f1ee; --border: #a6c8bf; --accent: #2f8a74; }
+  html[data-theme="navy"]  { --bg: #141d2b; --fg: #b9c6d6; --bar: #1c2738ee; --border: #2f4058; --accent: #6ea8dc; }
+  html[data-theme="dark"]  { --bg: #000000; --fg: #b4b4b4; --bar: #101010ee; --border: #333; --accent: #4a90d9; }
 
   * { box-sizing: border-box; }
   /* 背景只放在 body 上，会自动铺满整个画布（放在 html 上会导致滚动后主题背景不生效） */
@@ -68,6 +73,14 @@
   #tocList div { padding: 6px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #tocList div:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
   #tocList div.cur { color: var(--accent); font-weight: bold; }
+  /* 正文查找（Ctrl+F） */
+  #findBar { position: fixed; top: var(--topH, 48px); right: 24px; z-index: 13; display: none; gap: 6px; align-items: center; padding: 6px 10px;
+    background: var(--bar); border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; backdrop-filter: blur(6px); box-shadow: 0 4px 16px #0003; }
+  #findBar.show { display: flex; }
+  #findKw { width: 220px; font-size: 14px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--fg); }
+  #findCount { font-size: 12px; opacity: .75; min-width: 72px; text-align: center; white-space: nowrap; }
+  #reader mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+  #reader mark.cur { background: color-mix(in srgb, var(--accent) 70%, #fff); color: #000; outline: 2px solid var(--accent); }
   .modal { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; background: #0006; }
   .modal.show { display: flex; }
   .modal .box { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; width: 520px; max-width: 92vw; max-height: 88vh; overflow: auto; box-shadow: 0 10px 40px #0005; }
@@ -97,6 +110,7 @@
 
   <div class="group">
     <button id="btnToc" title="章节目录">☰ 目录</button>
+    <button id="btnFind" title="查找正文 (Ctrl+F)">🔎</button>
     <input type="number" id="chapNo" min="1" placeholder="章节" title="输入章节数字，回车跳转">
     <button id="btnPrevChap" title="上一章">‹</button>
     <button id="btnNextChap" title="下一章">›</button>
@@ -117,8 +131,13 @@
     <select id="theme">
       <option value="paper">纸张</option>
       <option value="white">纯白</option>
+      <option value="sepia">羊皮纸</option>
+      <option value="ink">水墨</option>
       <option value="green">护眼</option>
+      <option value="mint">薄荷</option>
       <option value="night">夜间</option>
+      <option value="navy">藏蓝</option>
+      <option value="dark">纯黑</option>
     </select>
   </div>
   <div class="group">
@@ -132,6 +151,14 @@
 <div id="shelf"></div>
 <div id="reader" style="display:none"></div>
 
+
+<div id="findBar">
+  <input type="text" id="findKw" placeholder="查找正文，回车下一个">
+  <span id="findCount"></span>
+  <button id="findPrev" title="上一个 (Shift+Enter)">‹</button>
+  <button id="findNext" title="下一个 (Enter)">›</button>
+  <button id="findClose" title="关闭 (Esc)">✕</button>
+</div>
 
 <div id="tocPanel">
   <div class="head"><input type="text" id="tocFilter" placeholder="筛选章节名"><span id="tocCount" class="small"></span><button id="btnTocClose">✕</button></div>
@@ -212,7 +239,7 @@ document.addEventListener('drop', e => { e.preventDefault(); drop.classList.remo
 const shelf = document.getElementById('shelf'), reader = document.getElementById('reader'), bookTitle = document.getElementById('bookTitle');
 async function showShelf() {
   stopAuto();
-  currentId = null; paras = []; blocks = [];
+  closeFind(); currentId = null; paras = []; blocks = [];
   localStorage.removeItem('nr-last');
   reader.style.display = 'none'; reader.innerHTML = ''; shelf.style.display = 'block';
   chapters = []; tocPanel.classList.remove('show'); document.getElementById('curChap').textContent = '';
@@ -237,7 +264,9 @@ document.getElementById('btnShelf').onclick = showShelf;
 /* ============ 打开书 & 渲染（整本连续滚动，不分页） ============ */
 let currentId = null, paras = [], blocks = [], chapters = [], TOP = 80;
 function measureTop() {
-  TOP = document.getElementById('topbar').offsetHeight + 16;
+  const th = document.getElementById('topbar').offsetHeight;
+  TOP = th + 16;
+  document.documentElement.style.setProperty('--topH', th + 'px');
   reader.style.paddingTop = TOP + 'px'; shelf.style.paddingTop = TOP + 'px';
 }
 window.addEventListener('resize', () => keepPosition(measureTop));
@@ -247,6 +276,7 @@ async function openBook(id) {
   currentId = id;
   shelf.style.display = 'none'; reader.style.display = 'block';
   bookTitle.textContent = book.name; setTitle(book.name + ' - 月读');
+  closeFind();
   reader.innerHTML = '';
   const BLK = 50, esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   let html = '', n = 0;
@@ -370,6 +400,8 @@ btnAuto.onclick = () => auto ? stopAuto() : startAuto();
 
 /* ============ 快捷键 & 点击正文隐藏工具栏 ============ */
 document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); openFind(); return; }
+  if (e.key === 'Escape' && findBar.classList.contains('show')) { closeFind(); return; }
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   if (e.code === 'Space') { e.preventDefault(); auto ? stopAuto() : startAuto(); }
   else if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); setFs(settings.fs + 1); }
@@ -378,6 +410,70 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowRight') { settings.speed = Math.min(10, settings.speed + 1); applySettings(); }
 });
 reader.addEventListener('click', () => document.getElementById('topbar').classList.toggle('hidden'));
+
+/* ============ 正文查找：Ctrl+F 唤起，回车下一个，Shift+回车上一个，Esc 关闭 ============ */
+const findBar = document.getElementById('findBar'), findKw = document.getElementById('findKw'), findCount = document.getElementById('findCount');
+const FIND_MAX = 5000;
+let finds = [], findIdx = -1, findTimer = null, findQuery = '', findMarked = new Set();
+function openFind() {
+  if (!currentId) return;
+  findBar.classList.add('show'); findKw.focus(); findKw.select();
+  if (findKw.value.trim() && !finds.length) runFind();
+}
+function clearFind() {
+  for (const i of findMarked) { const p = paras[i]; if (p) p.textContent = p.textContent; }   // 去掉 <mark>，还原纯文本
+  findMarked.clear(); finds = []; findIdx = -1; findQuery = ''; findCount.textContent = '';
+}
+function closeFind() { findBar.classList.remove('show'); clearFind(); findKw.blur(); }
+function runFind() {
+  clearFind();
+  const q = findKw.value.trim(); if (!q || !paras.length) return;
+  findQuery = q;
+  const ql = q.toLowerCase();
+  for (let i = 0; i < paras.length && finds.length < FIND_MAX; i++) {
+    const t = paras[i].textContent.toLowerCase();
+    let pos = t.indexOf(ql);
+    while (pos >= 0 && finds.length < FIND_MAX) { finds.push({ i, pos }); pos = t.indexOf(ql, pos + ql.length); }
+  }
+  if (!finds.length) { findCount.textContent = '无结果'; return; }
+  const top = topPara();                       // 从当前阅读位置往后找第一个
+  let k = finds.findIndex(f => f.i >= top); if (k < 0) k = 0;
+  gotoFind(k);
+}
+function markPara(i) {
+  if (findMarked.has(i)) return;
+  const p = paras[i], text = p.textContent, tl = text.toLowerCase(), ql = findQuery.toLowerCase();
+  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let html = '', last = 0, pos = tl.indexOf(ql);
+  while (pos >= 0) {
+    html += esc(text.slice(last, pos)) + '<mark data-pos="' + pos + '">' + esc(text.slice(pos, pos + ql.length)) + '</mark>';
+    last = pos + ql.length; pos = tl.indexOf(ql, last);
+  }
+  p.innerHTML = html + esc(text.slice(last));
+  findMarked.add(i);
+}
+function gotoFind(k) {
+  if (!finds.length) return;
+  findIdx = (k + finds.length) % finds.length;
+  const f = finds[findIdx];
+  stopAuto();
+  markPara(f.i);
+  const old = reader.querySelector('mark.cur'); if (old) old.classList.remove('cur');
+  const m = paras[f.i].querySelector('mark[data-pos="' + f.pos + '"]'); if (m) m.classList.add('cur');
+  scrollToPara(f.i, 0);                        // 先让该块排版
+  if (m) window.scrollTo(0, Math.max(0, absTop(m) - TOP - innerHeight * 0.3));   // 匹配行放在视口上三分之一处
+  findCount.textContent = '第 ' + (findIdx + 1) + ' / ' + finds.length + (finds.length >= FIND_MAX ? '+' : '');
+  updateProgress(); updateCurChap();
+}
+findKw.addEventListener('input', () => { clearTimeout(findTimer); findTimer = setTimeout(runFind, 250); });
+findKw.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); clearTimeout(findTimer); if (findKw.value.trim() !== findQuery) runFind(); else gotoFind(findIdx + (e.shiftKey ? -1 : 1)); }
+  else if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+});
+document.getElementById('findNext').onclick = () => gotoFind(findIdx + 1);
+document.getElementById('findPrev').onclick = () => gotoFind(findIdx - 1);
+document.getElementById('findClose').onclick = closeFind;
+document.getElementById('btnFind').onclick = openFind;
 
 /* ============ 章节识别与跳转 ============ */
 const CN_NUM = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
